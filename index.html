@@ -22,19 +22,27 @@
       color: black;
     }
     #resultado {
-      padding: 20px;
-      font-size: 20px;
+      padding: 22px;
+      margin: 15px auto;
+      max-width: 400px;
+      border-radius: 15px;
+      background: #333;
+      font-size: 21px;
       font-weight: bold;
+      white-space: pre-line;
       overflow-wrap: anywhere;
     }
     button {
+      display: block;
       background: #ff4fa3;
       color: white;
       border: none;
       padding: 16px;
       border-radius: 12px;
       font-size: 17px;
-      margin: 15px;
+      margin: 15px auto;
+      width: 100%;
+      max-width: 400px;
       cursor: pointer;
     }
     #control { display: none; }
@@ -52,9 +60,10 @@
 
   <div id="control">
     <p id="usuario"></p>
-    <button id="salir">Cerrar sesión</button>
     <div id="reader"></div>
     <div id="resultado">Esperando QR...</div>
+    <button id="siguiente">🔄 SIGUIENTE ENTRADA</button>
+    <button id="salir">Cerrar sesión</button>
   </div>
 
   <script type="module">
@@ -72,6 +81,14 @@
     } from
       "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
 
+    import {
+      getFirestore,
+      doc,
+      runTransaction,
+      serverTimestamp
+    } from
+      "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
+
     const firebaseConfig = {
       apiKey: "AIzaSyCReqv35YIIDAN6ys5nUxkHszZLmuQXpS8",
       authDomain: "club-despechadas-entradas.firebaseapp.com",
@@ -84,6 +101,7 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getFirestore(app);
     const proveedor = new GoogleAuthProvider();
 
     const autorizadas = [
@@ -92,7 +110,13 @@
     ];
 
     let scanner = null;
-    let ultimo = "";
+    let procesando = false;
+
+    function mostrar(texto, color = "#333") {
+      const resultado = document.getElementById("resultado");
+      resultado.textContent = texto;
+      resultado.style.background = color;
+    }
 
     document.getElementById("entrar").onclick = async () => {
       try {
@@ -117,6 +141,75 @@
 
     document.getElementById("salir").onclick = () => signOut(auth);
 
+    document.getElementById("siguiente").onclick = () => {
+      procesando = false;
+      mostrar("Esperando QR...");
+    };
+
+    async function validarQR(codigo) {
+      if (procesando) return;
+      procesando = true;
+
+      mostrar("Verificando entrada...", "#555");
+
+      try {
+        const referencia = doc(db, "entradas", codigo.trim());
+
+        const resultado = await runTransaction(db, async transaccion => {
+          const entrada = await transaccion.get(referencia);
+
+          if (!entrada.exists()) {
+            return { estado: "INVALIDA" };
+          }
+
+          const datos = entrada.data();
+
+          if (datos.estado === "UTILIZADA") {
+            return {
+              estado: "USADA",
+              nombre: datos.nombre || ""
+            };
+          }
+
+          if (datos.estado !== "DISPONIBLE") {
+            return { estado: "INVALIDA" };
+          }
+
+          transaccion.update(referencia, {
+            estado: "UTILIZADA",
+            fechaIngreso: serverTimestamp()
+          });
+
+          return {
+            estado: "OK",
+            nombre: datos.nombre || ""
+          };
+        });
+
+        if (resultado.estado === "OK") {
+          mostrar(
+            "✅ ENTRADA VÁLIDA\n\n" + resultado.nombre,
+            "#167a35"
+          );
+        } else if (resultado.estado === "USADA") {
+          mostrar(
+            "❌ ENTRADA YA UTILIZADA\n\n" + resultado.nombre,
+            "#b91c1c"
+          );
+        } else {
+          mostrar("❌ QR NO VÁLIDO", "#b91c1c");
+        }
+
+      } catch (error) {
+        mostrar(
+          "⚠️ NO SE PUDO VALIDAR\n\n" +
+          "No permitas el ingreso hasta comprobarlo.\n\n" +
+          error.message,
+          "#9a6700"
+        );
+      }
+    }
+
     onAuthStateChanged(auth, async usuario => {
       const correo = usuario?.email?.toLowerCase();
 
@@ -124,15 +217,17 @@
         document.getElementById("acceso").style.display = "block";
         document.getElementById("control").style.display = "none";
 
+        if (scanner) {
+          try { await scanner.clear(); } catch (e) {}
+          scanner = null;
+        }
+
+        procesando = false;
+
         if (usuario) {
           document.getElementById("mensaje").textContent =
             "Esta cuenta no está autorizada.";
           await signOut(auth);
-        }
-
-        if (scanner) {
-          try { await scanner.clear(); } catch (e) {}
-          scanner = null;
         }
         return;
       }
@@ -149,13 +244,10 @@
           false
         );
 
-        scanner.render(codigo => {
-          if (codigo === ultimo) return;
-          ultimo = codigo;
-
-          document.getElementById("resultado").textContent =
-            "📷 QR LEÍDO\n\nPendiente de validar en la planilla.";
-        }, () => {});
+        scanner.render(
+          codigo => validarQR(codigo),
+          () => {}
+        );
       }
     });
   </script>
