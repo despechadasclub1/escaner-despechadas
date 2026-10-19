@@ -24,35 +24,140 @@
     #resultado {
       padding: 20px;
       font-size: 20px;
+      font-weight: bold;
       overflow-wrap: anywhere;
     }
+    button {
+      background: #ff4fa3;
+      color: white;
+      border: none;
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 17px;
+      margin: 15px;
+      cursor: pointer;
+    }
+    #control { display: none; }
   </style>
 </head>
 <body>
   <h1>💖 CLUB DE LAS DESPECHADAS</h1>
-  <h2>Escáner de entradas 🎟️</h2>
-  <div id="reader"></div>
-  <div id="resultado">Esperando QR...</div>
+  <h2>Control de entradas 🎟️</h2>
 
-  <script>
+  <div id="acceso">
+    <p>Ingresá con tu cuenta autorizada.</p>
+    <button id="entrar">🔐 INGRESAR CON GOOGLE</button>
+    <p id="mensaje"></p>
+  </div>
+
+  <div id="control">
+    <p id="usuario"></p>
+    <button id="salir">Cerrar sesión</button>
+    <div id="reader"></div>
+    <div id="resultado">Esperando QR...</div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from
+      "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
+
+    import {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signInWithRedirect,
+      getRedirectResult,
+      onAuthStateChanged,
+      signOut
+    } from
+      "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCReqv35YIIDAN6ys5nUxkHszZLmuQXpS8",
+      authDomain: "club-despechadas-entradas.firebaseapp.com",
+      projectId: "club-despechadas-entradas",
+      storageBucket: "club-despechadas-entradas.firebasestorage.app",
+      messagingSenderId: "101212438318",
+      appId: "1:101212438318:web:56f743240a572899a204bf",
+      measurementId: "G-57X9VZK52N"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const proveedor = new GoogleAuthProvider();
+
+    const autorizadas = [
+      "elclubdelas.despechadas1@gmail.com",
+      "laugabrielli1987@gmail.com"
+    ];
+
+    let scanner = null;
     let ultimo = "";
 
-    function alEscanear(codigo) {
-      if (codigo === ultimo) return;
-      ultimo = codigo;
-      document.getElementById("resultado").textContent =
-        "✅ QR LEÍDO CORRECTAMENTE";
-    }
+    document.getElementById("entrar").onclick = async () => {
+      try {
+        await signInWithPopup(auth, proveedor);
+      } catch (error) {
+        if (
+          error.code === "auth/popup-blocked" ||
+          error.code === "auth/operation-not-supported-in-this-environment"
+        ) {
+          await signInWithRedirect(auth, proveedor);
+        } else {
+          document.getElementById("mensaje").textContent =
+            "Error al ingresar: " + error.message;
+        }
+      }
+    };
 
-    function errorEscaneo() {}
+    getRedirectResult(auth).catch(error => {
+      document.getElementById("mensaje").textContent =
+        "Error de acceso: " + error.message;
+    });
 
-    const scanner = new Html5QrcodeScanner(
-      "reader",
-      { fps: 10, qrbox: 250 },
-      false
-    );
+    document.getElementById("salir").onclick = () => signOut(auth);
 
-    scanner.render(alEscanear, errorEscaneo);
+    onAuthStateChanged(auth, async usuario => {
+      const correo = usuario?.email?.toLowerCase();
+
+      if (!usuario || !autorizadas.includes(correo)) {
+        document.getElementById("acceso").style.display = "block";
+        document.getElementById("control").style.display = "none";
+
+        if (usuario) {
+          document.getElementById("mensaje").textContent =
+            "Esta cuenta no está autorizada.";
+          await signOut(auth);
+        }
+
+        if (scanner) {
+          try { await scanner.clear(); } catch (e) {}
+          scanner = null;
+        }
+        return;
+      }
+
+      document.getElementById("acceso").style.display = "none";
+      document.getElementById("control").style.display = "block";
+      document.getElementById("usuario").textContent =
+        "Sesión: " + correo;
+
+      if (!scanner) {
+        scanner = new Html5QrcodeScanner(
+          "reader",
+          { fps: 10, qrbox: 250 },
+          false
+        );
+
+        scanner.render(codigo => {
+          if (codigo === ultimo) return;
+          ultimo = codigo;
+
+          document.getElementById("resultado").textContent =
+            "📷 QR LEÍDO\n\nPendiente de validar en la planilla.";
+        }, () => {});
+      }
+    });
   </script>
 </body>
 </html>
