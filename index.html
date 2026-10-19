@@ -1,0 +1,58 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Club de las Despechadas</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      background: #170016;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 { color: #ff4fa3; }
+    #reader {
+      max-width: 400px;
+      margin: 20px auto;
+      background: white;
+      color: black;
+    }
+    #resultado {
+      padding: 20px;
+      font-size: 20px;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <h1>💖 CLUB DE LAS DESPECHADAS</h1>
+  <h2>Escáner de entradas 🎟️</h2>
+  <div id="reader"></div>
+  <div id="resultado">Esperando QR...</div>
+
+  <script>
+    let ultimo = "";
+
+    function alEscanear(codigo) {
+      if (codigo === ultimo) return;
+      ultimo = codigo;
+      document.getElementById("resultado").textContent =
+        "✅ QR LEÍDO CORRECTAMENTE";
+    }
+
+    function errorEscaneo() {}
+
+    const scanner = new Html5QrcodeScanner(
+      "reader",
+      { fps: 10, qrbox: 250 },
+      false
+    );
+
+    scanner.render(alEscanear, errorEscaneo);
+  </script>
+</body>
+</html>
